@@ -1,29 +1,25 @@
-from src.llm.factory import get_client
-from src.llm.tasks.find_bugs import find_bugs
+import argparse
+from pathlib import Path
+from src.agent.graph import build_graph
+from src.logger import get_logger
 
+logger = get_logger(__name__)
 
-SAMPLE_CODE = """
-def divide(numbers, divisor):
-    results = []
-    for i in range(len(numbers)):
-        result = numbers[i] / divisor
-        results.append(result)
-    return results
+def parse_args():
+    parser = argparse.ArgumentParser(description="Analyze a python file to find bugs")
+    parser.add_argument("path", help="path of the repo/folder to analyze")
+    return parser.parse_args()    
 
-def get_user(users, id):
-    for i in range(len(users)):
-        if users[i]["id"] = id:
-            return users[i]
-    return None
-"""
 
 if __name__ == "__main__":
-    client = get_client()
-    report = find_bugs(SAMPLE_CODE, client)
+    args = parse_args()
 
-    print(f"\n{'='*40}")
-    print(f"Trovati {len(report.bugs)} bug\n")
-    for bug in report.bugs:
-        print(f"  [{bug.severity.upper()}] Linea {bug.line}: {bug.description}")
-        print(f"  Fix: {bug.fix}\n")
-    print(f"Sommario: {report.summary}")
+    agent = build_graph()
+    final_state = agent.invoke({
+        "repo_path":       Path(args.path),
+        "files_to_analyze": [],
+        "files_analyzed":  [],
+        "files_failed":    [],
+        "reports":         {},
+        "total_bugs":      0,
+    })

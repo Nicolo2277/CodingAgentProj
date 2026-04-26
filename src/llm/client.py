@@ -83,6 +83,9 @@ class OllamaClient(BaseLLMClient):
         except requests.exceptions.Timeout:
             logger.error("Timeout 120 seconds")
             raise
+        except requests.exceptions.HTTPError as e:
+            logger.error(" HTTP Error: %s — %s", e, e.response.text)
+            raise
 
         data = response.json()
         return LLMResponse(
