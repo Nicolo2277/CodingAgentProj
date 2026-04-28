@@ -1,14 +1,14 @@
+# main.py
 import argparse
 from pathlib import Path
 from src.agent.graph import build_graph
-from src.logger import get_logger
 
-logger = get_logger(__name__)
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Analyze a python file to find bugs")
-    parser.add_argument("path", help="path of the repo/folder to analyze")
-    return parser.parse_args()    
+    parser = argparse.ArgumentParser(description="ReAct agent for Python repo analysis")
+    parser.add_argument("path",         help="Path to the repo")
+    parser.add_argument("--max-steps",  type=int, default=20)
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
@@ -16,10 +16,19 @@ if __name__ == "__main__":
 
     agent = build_graph()
     final_state = agent.invoke({
-        "repo_path":       Path(args.path),
-        "files_to_analyze": [],
-        "files_analyzed":  [],
-        "files_failed":    [],
-        "reports":         {},
-        "total_bugs":      0,
-    })
+        "repo_path":      Path(args.path),
+        "files_analyzed": [],
+        "files_failed":   [],
+        "action_history": [],
+        "current_step":   0,
+        "max_steps":      args.max_steps,
+        "finished":       False,
+        "reports":        {},
+        "total_bugs":     0,
+        "summary":        "",
+    }) # type: ignore
+
+    print(f"\n{'='*40}")
+    print(f"Summary: {final_state.get('summary', 'N/A')}")
+    print(f"Files analyzed: {len(final_state.get('files_analyzed', []))}")
+    print(f"Total bugs: {final_state.get('total_bugs', 0)}")

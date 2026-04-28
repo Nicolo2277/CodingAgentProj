@@ -12,3 +12,10 @@ class Bug(BaseModel):
 class BugReport(BaseModel):
     bugs: list[Bug]
     summary: str
+
+
+class AgentAction(BaseModel):
+    thought:      str
+    action:       Literal["list_files", "analyze_file", "finish"]
+    action_input: str
+    reasoning:    str
