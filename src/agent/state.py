@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Annotated
 from pathlib import Path
 import operator
-from src.models.schemas import BugReport
+from src.models.schemas import BugReport, RunResult
 from langgraph.graph import MessagesState
 from typing_extensions import TypedDict
 
@@ -20,6 +20,7 @@ class AgentState(TypedDict):
     available_files: list[str]
     files_analyzed: Annotated[list[Path], operator.add]   # extend
     files_failed: Annotated[list[Path], operator.add]     # extend
+    files_run: Annotated[list[str], operator.add]
     
     # ReAct
     action_history: Annotated[list[ActionRecord], operator.add]
@@ -29,6 +30,7 @@ class AgentState(TypedDict):
 
     # results
     reports: dict[str, BugReport]         # overwrite with manual merge
+    run_results: dict[str, RunResult]
 
     # metadata
     total_bugs: int

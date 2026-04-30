@@ -19,3 +19,11 @@ class AgentAction(BaseModel):
     action:       Literal["list_files", "analyze_file", "finish"]
     action_input: str
     reasoning:    str
+    
+
+class RunResult(BaseModel):
+    file: str
+    returncode: int
+    stdout: str
+    stderr: str
+    timed_out: bool = False
