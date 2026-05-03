@@ -63,6 +63,7 @@ Analyzed : {files_analyzed}
 Failed   : {files_failed}
 Remaining: {files_remaining}
 Bugs so far: {total_bugs}
+Files run: {files_run}
 
 ── RULES ─────────────────────────────────────────────────────────────────
 - Follow the plan order: analyze the FIRST file in "Remaining".
@@ -76,7 +77,7 @@ Bugs so far: {total_bugs}
 What do you do next? Respond ONLY with valid JSON:
 {{
   "thought":      "I should...",
-  "action":       "analyze_file|finish|list_files",
+  "action":       "analyze_file|run_file|finish|list_files",
   "action_input": "...",
   "reasoning":    "Because..."
 }}"""
@@ -105,13 +106,14 @@ def build(state: AgentState) -> tuple[str, str]:
     plan = state.get("plan")
     analyzed = set(state.get("files_analyzed", []))
     failed   = set(state.get("files_failed",   []))
+    run = set(state.get("files_run", []))
 
     if plan:
         all_files = [s.file for s in plan.steps]
     else:
         all_files = state.get("available_files", [])
 
-    remaining = [f for f in all_files if f not in analyzed and f not in failed]
+    remaining = [f for f in all_files if f not in failed and not (f in analyzed and f in run)]
 
     user = USER_TEMPLATE.format(
         repo_path      = state["repo_path"],
@@ -120,7 +122,7 @@ def build(state: AgentState) -> tuple[str, str]:
         plan_steps     = _format_plan_steps(state),
         files_analyzed = ", ".join(analyzed) or "none yet",
         files_failed   = ", ".join(failed)   or "none",
-        files_run=state.get("files_run", [])           or "none yet",
+        files_run      = ", ".join(run)      or "none yet",
         files_remaining= ", ".join(remaining) or "none — call finish",
         total_bugs     = state.get("total_bugs", 0),
         action_history = _format_history(state.get("action_history", [])),

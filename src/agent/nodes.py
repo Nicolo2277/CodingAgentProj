@@ -18,8 +18,6 @@ def node_plan(state: AgentState) -> dict:
         "plan":            plan,
         "available_files": available_files,
     }
-    
-
 
 def node_think_act(state: AgentState) -> dict:
     action = think(state, client)
@@ -52,7 +50,8 @@ def node_think_act(state: AgentState) -> dict:
         "result":       result_text,
     }
 
-    return {"action_history": [record], **state_updates}  # type: ignore
+    return {"current_step": state.get("current_step", 0) + 1,
+            "action_history": [record], **state_updates}  # type: ignore
 
 
 def node_save_results(state: AgentState) -> dict:
