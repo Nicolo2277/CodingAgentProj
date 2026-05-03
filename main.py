@@ -30,7 +30,11 @@ if __name__ == "__main__":
         "summary":        "",
     }) # type: ignore
 
+    plan  = final_state.get("plan")
+    steps = len(plan.steps) if plan else "?"
+    
     print(f"\n{'='*40}")
+    print(f"Plan:           {steps} files planned")
     print(f"Summary: {final_state.get('summary', 'N/A')}")
     print(f"Files analyzed: {len(final_state.get('files_analyzed', []))}")
     print(f"Files run      : {len(final_state.get('files_run', []))}")

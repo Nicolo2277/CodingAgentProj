@@ -2,9 +2,8 @@ from __future__ import annotations
 from typing import Annotated
 from pathlib import Path
 import operator
-from src.models.schemas import BugReport, RunResult
-from langgraph.graph import MessagesState
-from typing_extensions import TypedDict
+from src.models.schemas import BugReport, RunResult, Plan
+from typing_extensions import TypedDict, NotRequired
 
 class ActionRecord(TypedDict):
     thought: str
@@ -18,8 +17,8 @@ class AgentState(TypedDict):
 
     # file management
     available_files: list[str]
-    files_analyzed: Annotated[list[Path], operator.add]   # extend
-    files_failed: Annotated[list[Path], operator.add]     # extend
+    files_analyzed: Annotated[list[str], operator.add]   # extend
+    files_failed: Annotated[list[str], operator.add]     # extend
     files_run: Annotated[list[str], operator.add]
     
     # ReAct
@@ -27,6 +26,9 @@ class AgentState(TypedDict):
     current_step:   int
     max_steps:      int
     finished:       bool
+    
+    # Planner
+    plan: NotRequired[Plan]
 
     # results
     reports: dict[str, BugReport]         # overwrite with manual merge

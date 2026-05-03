@@ -1,7 +1,6 @@
 from src.agent.state import AgentState
 
-
-SYSTEM = """You are an autonomous code review agent.
+SYSTEM = """"You are an autonomous code review agent executing a pre-built analysis plan.
 You have access to tools to explore, analyze, and execute a Python repository.
 At each step you reason about what to do next and call exactly one tool.
 You always respond with valid JSON and nothing else.
@@ -52,64 +51,89 @@ CORRECT:
   "action": "finish",       "action_input": "summary here"
 """
 
+
 USER_TEMPLATE = """Repository: {repo_path}
 Step: {current_step}/{max_steps}
 
-Available files (already fetched):
-{available_files}
+── PLAN ──────────────────────────────────────────────────────────────────
+{plan_steps}
 
-Files analyzed so far : {files_analyzed}
-Files run so far      : {files_run}
-Bugs found so far     : {total_bugs}
+── PROGRESS ──────────────────────────────────────────────────────────────
+Analyzed : {files_analyzed}
+Failed   : {files_failed}
+Remaining: {files_remaining}
+Bugs so far: {total_bugs}
 
-Rules:
-- Do NOT call list_files again, you already have the file list above.
-- Analyze and run ONE file per step.
-- Phase 1: call analyze_file on each file not yet in "files analyzed".
-- Phase 2: call run_file on each file not yet in "files run" (only after analyzed).
-- Call finish only when ALL files appear in BOTH lists.
+── RULES ─────────────────────────────────────────────────────────────────
+- Follow the plan order: analyze the FIRST file in "Remaining".
+- Do NOT call list_files — you already have the file list.
+- Call finish ONLY when "Remaining" is empty.
+- If a file fails, move to the next one.
 
-Action history:
+── HISTORY ───────────────────────────────────────────────────────────────
 {action_history}
 
 What do you do next? Respond ONLY with valid JSON:
 {{
-  "thought": "I should...",
-  "action": "list_files|analyze_file|run_file|finish",
-  "action_input": "<single file path, or empty string, or summary>",
-  "reasoning": "Because..."
+  "thought":      "I should...",
+  "action":       "analyze_file|finish|list_files",
+  "action_input": "...",
+  "reasoning":    "Because..."
 }}"""
 
 
+def _format_plan_steps(state: AgentState) -> str:
+    plan = state.get("plan")
+    if not plan:
+        return "  (no plan. call list_files to fetch files)"
+
+    analyzed = set(state.get("files_analyzed", []))
+    failed   = set(state.get("files_failed", []))
+    lines = []
+    for step in plan.steps:
+        if step.file in analyzed:
+            status = "Ok"
+        elif step.file in failed:
+            status = "Error:"
+        else:
+            status = "·"
+        lines.append(f"  [{status}] [{step.priority:6}] {step.file}  — {step.reason}")
+    return "\n".join(lines)
+
+
 def build(state: AgentState) -> tuple[str, str]:
-    available = state.get("available_files", [])
-    available_str = (
-        "\n".join(available) if available
-        else "not fetched yet — call list_files first"
-    )
-    history = _format_history(state.get("action_history", []))
+    plan = state.get("plan")
+    analyzed = set(state.get("files_analyzed", []))
+    failed   = set(state.get("files_failed",   []))
+
+    if plan:
+        all_files = [s.file for s in plan.steps]
+    else:
+        all_files = state.get("available_files", [])
+
+    remaining = [f for f in all_files if f not in analyzed and f not in failed]
 
     user = USER_TEMPLATE.format(
-        repo_path=state["repo_path"],
-        current_step=state.get("current_step", 1),
-        max_steps=state.get("max_steps", 20),
-        available_files=available_str,
-        files_analyzed=state.get("files_analyzed", []) or "none yet",
+        repo_path      = state["repo_path"],
+        current_step   = state.get("current_step", 1),
+        max_steps      = state.get("max_steps", 20),
+        plan_steps     = _format_plan_steps(state),
+        files_analyzed = ", ".join(analyzed) or "none yet",
+        files_failed   = ", ".join(failed)   or "none",
         files_run=state.get("files_run", [])           or "none yet",
-        total_bugs=state.get("total_bugs", 0),
-        action_history=history or "none yet",
+        files_remaining= ", ".join(remaining) or "none — call finish",
+        total_bugs     = state.get("total_bugs", 0),
+        action_history = _format_history(state.get("action_history", [])),
     )
     return SYSTEM, user
-
 
 def _format_history(history: list) -> str:
     if not history:
         return ""
     lines = []
-    for i, record in enumerate(history, 1):
+    for i, record in enumerate(history[-5:], 1): #We consider the last 5 entries
         lines.append(
-            f"[{i}] thought: {record['thought']}\n"
-            f"    action: {record['action']}({record['action_input']})\n"
-            f"    result: {record['result']}"
+            f"  [{i}] {record['action']}({record['action_input']!r})\n"
+            f"       → {record['result']}"
         )
     return "\n".join(lines)

@@ -1,6 +1,7 @@
 from src.agent.state import AgentState
 from src.agent.tools import tool_list_files, tool_analyze_file, tool_run_file
 from src.llm.tasks.think import think
+from src.llm.tasks.plan import create_plan
 from src.llm.factory import get_client
 from src.tools.output_writer import save_final_report
 from src.models.schemas import AgentAction
@@ -10,18 +11,20 @@ logger = get_logger(__name__)
 client = get_client()
 
 
-def node_think(state: AgentState) -> dict:
+def node_plan(state: AgentState) -> dict:
+    """Run once at start: build a prioritized file plan."""
+    plan, available_files = create_plan(state, client)
+    return {
+        "plan":            plan,
+        "available_files": available_files,
+    }
+    
+
+
+def node_think_act(state: AgentState) -> dict:
     action = think(state, client)
 
-    return {
-        "current_step": state.get("current_step", 0) + 1,
-        "_pending_action": action,
-    }
-
-
-def node_act(state: AgentState) -> dict:
-    action = AgentAction(**dict(state["_pending_action"]))
-    result_text  = ""
+    result_text = ""
     state_updates: dict = {}
 
     if action.action == "list_files":
