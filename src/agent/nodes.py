@@ -90,19 +90,22 @@ def node_think_act(state: AgentState) -> dict:
 
 
 # save_results
-
 def node_save_results(state: AgentState) -> dict:
+    perf: dict = state.get("performance", {})
     save_final_report(
         state["repo_path"],
         state.get("reports", {}),
         state.get("verified_reports", {}),
+        perf,
     )
+    files_improved = sum(1 for p in perf.values() if p.improved)
     logger.info(
-        "Done — %d files analyzed | %d run | %d verified | %d bugs (%d confirmed)",
-        len(state.get("files_analyzed",  [])),
-        len(state.get("files_run",       [])),
-        len(state.get("files_verified",  [])),
+        "Done — %d files analyzed | %d run | %d verified | %d bugs (%d confirmed) | %d files improved by retry",
+        len(state.get("files_analyzed", [])),
+        len(state.get("files_run",      [])),
+        len(state.get("files_verified", [])),
         state.get("total_bugs",     0),
         state.get("confirmed_bugs", 0),
+        files_improved,
     )
     return {}

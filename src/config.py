@@ -19,6 +19,15 @@ LOG_DIR = "logs/"
 _TEST_TIMEOUT_SEC = 10
 _OUTPUT_TRUNCATE  = 1_500  # chars fed back into the interpretation prompt
 
+#Verifier settings
+# Retry re-analysis when confirmation_rate is below this threshold.
+# Set to 0.0 to disable retries entirely.
+VERIFIER_MIN_SCORE: float = 0.5
+# Maximum retry attempts per file (initial analysis does not count).
+MAX_RETRIES: int = 2
+
+
 #Tools config settings
 _RUN_TIMEOUT_SEC  = 15
 _OUTPUT_TRUNCATE  = 2_000  # chars — keep prompts lean
+

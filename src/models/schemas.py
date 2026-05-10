@@ -85,3 +85,28 @@ class VerifiedBugReport(BaseModel):
     def verdict_for(self, bug_index: int) -> VerificationResult | None:
         """Look up the verification result for a specific bug index."""
         return next((v for v in self.verifications if v.bug_index == bug_index), None)
+
+
+class AnalysisAttempt(BaseModel):
+    """Snapshot of one analysis + verification cycle for a single file."""
+    attempt_number:     int   # 1 = initial, 2+ = retries
+    bug_count:          int
+    confirmed_count:    int
+    refuted_count:      int
+    inconclusive_count: int
+    confirmation_rate:  float
+ 
+ 
+class FilePerformance(BaseModel):
+    """Full history for a single file across all attempts."""
+    file:                      str
+    total_attempts:            int
+    attempts:                  list[AnalysisAttempt]
+    improved:                  bool
+    initial_confirmation_rate: float
+    final_confirmation_rate:   float
+ 
+    @computed_field  # type: ignore[misc]
+    @property
+    def improvement_delta(self) -> float:
+        return round(self.final_confirmation_rate - self.initial_confirmation_rate, 2)

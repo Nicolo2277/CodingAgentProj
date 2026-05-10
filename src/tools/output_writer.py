@@ -5,13 +5,13 @@ from pathlib import Path
 
 from src.config import OUTPUT_DIR
 from src.logger import get_logger
-from src.models.schemas import BugReport, VerifiedBugReport
+from src.models.schemas import BugReport, FilePerformance, VerifiedBugReport
 
 logger   = get_logger(__name__)
 OUT_ROOT = Path(OUTPUT_DIR)
 
 
-# Per-file helpers
+# Per-file
 
 def save_file_report(repo_path: Path, file_path: Path, report: BugReport) -> None:
     relative = file_path.relative_to(repo_path)
@@ -27,21 +27,18 @@ def save_verified_report(
     verified: VerifiedBugReport,
 ) -> None:
     relative = file_path.relative_to(repo_path)
-    out_path = (
-        OUT_ROOT / repo_path.name / "verified" / relative.with_suffix(".json")
-    )
+    out_path = OUT_ROOT / repo_path.name / "verified" / relative.with_suffix(".json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(verified.model_dump_json(indent=2), encoding="utf-8")
     logger.debug("Saved verified report: %s", out_path)
 
 
-# Final consolidated report 
+# Final consolidated report
 
 def _build_file_entry(
     report: BugReport,
     verified: VerifiedBugReport | None,
 ) -> dict:
-    """Merge static analysis + verification into a single, readable structure."""
     bugs = []
     for i, bug in enumerate(report.bugs):
         entry: dict = bug.model_dump()
@@ -59,7 +56,6 @@ def _build_file_entry(
         bugs.append(entry)
 
     result: dict = {"summary": report.summary, "bugs": bugs}
-
     if verified is not None:
         result["verification_stats"] = {
             "confirmed":         verified.confirmed_count,
@@ -69,7 +65,6 @@ def _build_file_entry(
                                  - verified.refuted_count,
             "confirmation_rate": verified.confirmation_rate,
         }
-
     return result
 
 
@@ -77,12 +72,23 @@ def save_final_report(
     repo_path: Path,
     reports: dict[str, BugReport],
     verified_reports: dict[str, VerifiedBugReport] | None = None,
+    performance: dict[str, FilePerformance] | None = None,
 ) -> None:
     verified_reports = verified_reports or {}
+    performance      = performance      or {}
 
     total_bugs      = sum(len(r.bugs) for r in reports.values())
-    total_confirmed = sum(
-        v.confirmed_count for v in verified_reports.values()
+    total_confirmed = sum(v.confirmed_count for v in verified_reports.values())
+
+    # Performance summary
+    files_improved  = sum(1 for p in performance.values() if p.improved)
+    avg_attempts    = (
+        sum(p.total_attempts for p in performance.values()) / len(performance)
+        if performance else 0.0
+    )
+    avg_delta = (
+        sum(p.improvement_delta for p in performance.values()) / len(performance)
+        if performance else 0.0
     )
 
     summary = {
@@ -90,12 +96,19 @@ def save_final_report(
         "total_files":     len(reports),
         "total_bugs":      total_bugs,
         "total_confirmed": total_confirmed,
-        "confirmation_rate": (
-            round(total_confirmed / total_bugs, 2) if total_bugs else 0.0
-        ),
+        "confirmation_rate": round(total_confirmed / total_bugs, 2) if total_bugs else 0.0,
+        "self_improvement": {
+            "files_retried":   files_improved,
+            "avg_attempts":    round(avg_attempts, 2),
+            "avg_rate_delta":  round(avg_delta, 2),
+        },
         "files": {
             path: _build_file_entry(report, verified_reports.get(path))
             for path, report in reports.items()
+        },
+        "performance": {
+            path: json.loads(perf.model_dump_json())
+            for path, perf in performance.items()
         },
     }
 
@@ -103,9 +116,10 @@ def save_final_report(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     logger.info(
-        "Final report saved — %d files | %d bugs | %d confirmed (%.0f%%)",
+        "Final report saved — %d files | %d bugs | %d confirmed (%.0f%%) | %d files improved by retry",
         summary["total_files"],
         total_bugs,
         total_confirmed,
         summary["confirmation_rate"] * 100,
+        files_improved,
     )

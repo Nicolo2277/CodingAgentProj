@@ -3,7 +3,7 @@ import operator
 from typing import Annotated
 from pathlib import Path
 import operator
-from src.models.schemas import BugReport, RunResult, Plan, VerifiedBugReport
+from src.models.schemas import BugReport, RunResult, Plan, VerifiedBugReport, FilePerformance
 from typing_extensions import TypedDict, NotRequired
 
 class ActionRecord(TypedDict):
@@ -36,6 +36,8 @@ class AgentState(TypedDict):
     run_results: dict[str, RunResult]
     verified_reports: dict[str, VerifiedBugReport]
 
+    performance: dict[str, FilePerformance]
+    
     # metadata
     total_bugs: int
     summary: str
