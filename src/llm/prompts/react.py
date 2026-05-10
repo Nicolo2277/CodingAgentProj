@@ -1,14 +1,17 @@
 from src.agent.state import AgentState
 
-SYSTEM = """"You are an autonomous code review agent executing a pre-built analysis plan.
-You have access to tools to explore, analyze, and execute a Python repository.
+SYSTEM = """You are an autonomous code review agent executing a pre-built analysis plan.
+You have access to tools to explore, analyse, and execute a Python repository.
 At each step you reason about what to do next and call exactly one tool.
 You always respond with valid JSON and nothing else.
 
 Available tools:
 - "list_files":   List all Python files in the repository.
-- "analyze_file": Statically analyze ONE Python file for bugs (no execution).
-- "run_file":     Execute ONE Python file and capture its stdout, stderr, and exit code.
+- "analyze_file": Statically analyse ONE Python file for bugs (no execution).
+- "run_file":     Health-check execution of ONE Python file — confirms it is
+                  importable and runs without environment issues.
+                  Do NOT use this to verify individual bug findings; that is
+                  handled automatically by the verifier after each run_file call.
 - "finish":       End the analysis and write a final summary.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -19,20 +22,18 @@ Phase 1 — STATIC ANALYSIS
   This catches bugs through code reading alone (None handling, off-by-one,
   type errors, missing error handling, etc.).
 
-Phase 2 — DYNAMIC VERIFICATION
+Phase 2 — HEALTH CHECK
   After analyze_file, call run_file on the SAME file.
-  Use the execution output to CONFIRM, REFUTE, or ENRICH the static findings:
-    • If the file crashes with a traceback → the static bugs likely reproduced.
-    • If it exits cleanly (exit 0, no stderr) → runtime seems fine for the
-      default execution path; static bugs may still be latent.
-    • Use stderr/stdout content to add new runtime-only observations to the
-      final summary (e.g. missing imports, NameError, unexpected output).
-  Warnings:
-    -Do NOT run a file that has NOT been analyzed yet.
-    -Do NOT analyze a file that is already in "files analyzed".
-    -Do NOT run a file that is already in "files run".
+  This confirms the file is importable and runnable in its real environment.
+  The verifier will automatically run targeted tests for each bug found —
+  you do not need to (and cannot) call the verifier yourself.
 
-After all files appear in BOTH "files analyzed" AND "files run" → call finish.
+Warnings:
+  - Do NOT run a file that has NOT been analysed yet.
+  - Do NOT analyse a file that is already in "files analysed".
+  - Do NOT run a file that is already in "files run".
+
+After all files appear in BOTH "files analysed" AND "files run" → call finish.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CRITICAL JSON RULES
@@ -59,17 +60,19 @@ Step: {current_step}/{max_steps}
 {plan_steps}
 
 ── PROGRESS ──────────────────────────────────────────────────────────────
-Analyzed : {files_analyzed}
-Failed   : {files_failed}
-Remaining: {files_remaining}
-Bugs so far: {total_bugs}
-Files run: {files_run}
+Analysed  : {files_analyzed}
+Run       : {files_run}
+Verified  : {files_verified}
+Failed    : {files_failed}
+Remaining : {files_remaining}
+Bugs so far: {total_bugs} total | {confirmed_bugs} confirmed by verifier
 
 ── RULES ─────────────────────────────────────────────────────────────────
-- Follow the plan order: analyze the FIRST file in "Remaining".
+- Follow the plan order: analyse the FIRST file in "Remaining".
 - Do NOT call list_files — you already have the file list.
 - Call finish ONLY when "Remaining" is empty.
 - If a file fails, move to the next one.
+- Verification runs automatically; never try to call it yourself.
 
 ── HISTORY ───────────────────────────────────────────────────────────────
 {action_history}
@@ -83,37 +86,59 @@ What do you do next? Respond ONLY with valid JSON:
 }}"""
 
 
+# Formatters 
+
 def _format_plan_steps(state: AgentState) -> str:
     plan = state.get("plan")
     if not plan:
-        return "  (no plan. call list_files to fetch files)"
+        return "  (no plan — call list_files to fetch files)"
 
     analyzed = set(state.get("files_analyzed", []))
-    failed   = set(state.get("files_failed", []))
+    failed   = set(state.get("files_failed",   []))
+    run      = set(state.get("files_run",      []))
+    verified = set(state.get("files_verified", []))
+
     lines = []
     for step in plan.steps:
-        if step.file in analyzed:
-            status = "Ok"
-        elif step.file in failed:
-            status = "Error:"
+        if step.file in failed:
+            status = "ERR"
+        elif step.file in verified:
+            status = "VER"
+        elif step.file in run:
+            status = "RUN"
+        elif step.file in analyzed:
+            status = "ANA"
         else:
             status = "·"
-        lines.append(f"  [{status}] [{step.priority:6}] {step.file}  — {step.reason}")
+        lines.append(
+            f"  [{status}] [{step.priority:6}] {step.file}  — {step.reason}"
+        )
+    return "\n".join(lines)
+
+
+def _format_history(history: list) -> str:
+    if not history:
+        return "  (none)"
+    lines = []
+    for i, record in enumerate(history[-5:], 1):
+        lines.append(
+            f"  [{i}] {record['action']}({record['action_input']!r})\n"
+            f"       → {record['result']}"
+        )
     return "\n".join(lines)
 
 
 def build(state: AgentState) -> tuple[str, str]:
-    plan = state.get("plan")
+    plan     = state.get("plan")
     analyzed = set(state.get("files_analyzed", []))
     failed   = set(state.get("files_failed",   []))
-    run = set(state.get("files_run", []))
+    run      = set(state.get("files_run",      []))
 
-    if plan:
-        all_files = [s.file for s in plan.steps]
-    else:
-        all_files = state.get("available_files", [])
-
-    remaining = [f for f in all_files if f not in failed and not (f in analyzed and f in run)]
+    all_files = [s.file for s in plan.steps] if plan else state.get("available_files", [])
+    remaining = [
+        f for f in all_files
+        if f not in failed and not (f in analyzed and f in run)
+    ]
 
     user = USER_TEMPLATE.format(
         repo_path      = state["repo_path"],
@@ -121,21 +146,12 @@ def build(state: AgentState) -> tuple[str, str]:
         max_steps      = state.get("max_steps", 20),
         plan_steps     = _format_plan_steps(state),
         files_analyzed = ", ".join(analyzed) or "none yet",
-        files_failed   = ", ".join(failed)   or "none",
-        files_run      = ", ".join(run)      or "none yet",
+        files_run      = ", ".join(run)       or "none yet",
+        files_verified = ", ".join(state.get("files_verified", [])) or "none yet",
+        files_failed   = ", ".join(failed)    or "none",
         files_remaining= ", ".join(remaining) or "none — call finish",
-        total_bugs     = state.get("total_bugs", 0),
+        total_bugs     = state.get("total_bugs",     0),
+        confirmed_bugs = state.get("confirmed_bugs", 0),
         action_history = _format_history(state.get("action_history", [])),
     )
     return SYSTEM, user
-
-def _format_history(history: list) -> str:
-    if not history:
-        return ""
-    lines = []
-    for i, record in enumerate(history[-5:], 1): #We consider the last 5 entries
-        lines.append(
-            f"  [{i}] {record['action']}({record['action_input']!r})\n"
-            f"       → {record['result']}"
-        )
-    return "\n".join(lines)

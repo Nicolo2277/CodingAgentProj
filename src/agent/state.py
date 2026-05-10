@@ -1,8 +1,9 @@
 from __future__ import annotations
+import operator
 from typing import Annotated
 from pathlib import Path
 import operator
-from src.models.schemas import BugReport, RunResult, Plan
+from src.models.schemas import BugReport, RunResult, Plan, VerifiedBugReport
 from typing_extensions import TypedDict, NotRequired
 
 class ActionRecord(TypedDict):
@@ -20,7 +21,7 @@ class AgentState(TypedDict):
     files_analyzed: Annotated[list[str], operator.add]   # extend
     files_failed: Annotated[list[str], operator.add]     # extend
     files_run: Annotated[list[str], operator.add]
-    
+    files_verified: Annotated[list[str], operator.add]
     # ReAct
     action_history: Annotated[list[ActionRecord], operator.add]
     current_step:   int
@@ -33,9 +34,10 @@ class AgentState(TypedDict):
     # results
     reports: dict[str, BugReport]         # overwrite with manual merge
     run_results: dict[str, RunResult]
+    verified_reports: dict[str, VerifiedBugReport]
 
     # metadata
     total_bugs: int
     summary: str
+    confirmed_bugs: int
     
-    _pending_action: dict  # transient, used to pass action between think→act

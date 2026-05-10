@@ -14,3 +14,11 @@ EXCLUDED_DIRS = {".venv", "__pycache__", ".git", "node_modules", ".mypy_cache", 
 
 LOG_LEVEL = "DEBUG"
 LOG_DIR = "logs/"
+
+# Verify bugs config settings
+_TEST_TIMEOUT_SEC = 10
+_OUTPUT_TRUNCATE  = 1_500  # chars fed back into the interpretation prompt
+
+#Tools config settings
+_RUN_TIMEOUT_SEC  = 15
+_OUTPUT_TRUNCATE  = 2_000  # chars — keep prompts lean
